@@ -1,323 +1,212 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mapeador DDD — Lista de Cidades</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Launcher Futurista – Rastreamento</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ff8a00">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
-    #map { height: 400px; width: 100%; margin-top: 10px; }
-    .cities li { margin: 2px 0; }
+    body {
+      margin: 0;
+      background: #0b0d0f;
+      color: #00ffe1;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #map {
+      height: 55vh;
+      width: 100%;
+    }
+
+    #controls {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      flex-wrap: wrap;
+    }
+
+    #controls button, #controls select {
+      background: #0b0d0f;
+      color: #00ffe1;
+      border: 1px solid #00ffe1;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    #hud {
+      margin: 10px;
+      padding: 12px;
+      backdrop-filter: blur(10px);
+      background: rgba(0,0,0,0.55);
+      border: 1px solid #00ffe1;
+      border-radius: 14px;
+      font-family: monospace;
+    }
+
+    #privacy {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      color: #00ffe1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    #privacy div {
+      max-width: 400px;
+      padding: 20px;
+      border: 1px solid #00ffe1;
+      border-radius: 12px;
+      text-align: center;
+      background: #0b0d0f;
+    }
+
+    #privacy button {
+      margin-top: 15px;
+      padding: 10px 16px;
+      background: #00ffe1;
+      border: none;
+      color: #000;
+      border-radius: 8px;
+      font-weight: bold;
+    }
   </style>
 </head>
-<!-- PWA -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#ff8a00">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Launcher Futurista">
-
-<script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js")
-      .then(() => console.log("PWA ativo"))
-      .catch(err => console.error("SW erro:", err));
-  });
-}
-</script>
 
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo-dot"></div>
-        <h1>Mapeador DDD — Cidades Associadas</h1>
-      </div>
-      <div class="note">Insira número ou DDD — mostra todas as cidades associadas ao DDD.</div>
-    </header>
 
-    <main class="main">
-      <section class="left-panel">
-        <div class="card">
-          <h2>Entrada</h2>
-          <p class="muted">Digite o número (com ou sem +55) ou só o DDD (ex: 81).</p>
-          <input id="phoneInput" class="input" placeholder="+55 (11) 99999-0000 ou 11" />
-          <div class="actions">
-  <button id="btnMap" class="btn primary">Mapear DDD</button>
-  <button onclick="iniciarRastreamentoReal()" class="btn primary">
-    📱 Rastrear meu celular
-  </button>
-  <button id="btnClear" class="btn ghost">Limpar</button>
-</div>
-
-        <div class="card history">
-          <h3>Histórico</h3>
-          <ul id="historyList" class="case-list"></ul>
-        </div>
-      </section>
-
-      <section class="right-panel">
-        <div class="card tracker">
-          <div class="tracker-header">
-            <h2 id="statusTitle">Pronto</h2>
-            <div id="statusSub" class="muted">Insira um número e clique em "Mapear DDD".</div>
-          </div>
-
-          <div class="visual">
-            <div id="radar" class="radar"><div class="line"></div></div>
-          </div>
-
-          <div id="map"></div> <!-- MAPA INTERATIVO -->
-
-          <div id="result" class="result">
-            <div class="placeholder muted">Aguardando entrada...</div>
-            <div id="cityList" class="city-list"></div>
-          </div>
-
-          <div class="tracker-footer">
-            <div class="small muted">Dados: lista oficial de cidades por DDD.</div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="footer muted">Protótipo local — lista de cidades representativas por DDD.</footer>
+  <!-- AVISO DE PRIVACIDADE -->
+  <div id="privacy">
+    <div>
+      <h3>Uso de Localização</h3>
+      <p>Este aplicativo utiliza sua localização apenas para rastreamento em tempo real. Nenhuma informação é compartilhada.</p>
+      <button onclick="aceitarPrivacidade()">Aceitar</button>
+    </div>
   </div>
 
-<script>
-/* ---------- DADOS: DDD -> cidade principal + lista de cidades ---------- */
-const dddData = {
-  "11": { main:"São Paulo","state":"SP", coords:[-23.55,-46.63], cities:["São Paulo","Guarulhos","Osasco","Santo André","São Bernardo do Campo","São Caetano do Sul","Mauá","Diadema","Suzano","Barueri"] },
-  "12": { main:"São José dos Campos","state":"SP", coords:[-23.19,-45.89], cities:["São José dos Campos","Taubaté","Jacareí","Aparecida","Caçapava","Pindamonhangaba"] },
-  "13": { main:"Santos","state":"SP", coords:[-23.96,-46.33], cities:["Santos","São Vicente","Praia Grande","Guarujá","Cubatão"] },
-  "14": { main:"Bauru","state":"SP", coords:[-22.33,-49.06], cities:["Bauru","Marília","Botucatu","Lençóis Paulista","Arealva"] },
-  "15": { main:"Sorocaba","state":"SP", coords:[-23.50,-47.46], cities:["Sorocaba","Itapetininga","Tatuí","Votorantim","Araçoiaba da Serra"] },
-  "16": { main:"Ribeirão Preto","state":"SP", coords:[-21.18,-47.81], cities:["Ribeirão Preto","Araraquara","Franca","São Carlos","Matão"] },
-  "17": { main:"São José do Rio Preto","state":"SP", coords:[-20.82,-49.38], cities:["São José do Rio Preto","Votuporanga","Catanduva","Fernandópolis"] },
-  "18": { main:"Presidente Prudente","state":"SP", coords:[-22.12,-51.41], cities:["Presidente Prudente","Araçatuba","Assis","Dracena"] },
-  "19": { main:"Campinas","state":"SP", coords:[-22.90,-47.06], cities:["Campinas","Piracicaba","Indaiatuba","Valinhos","Paulínia"] },
-  "21": { main:"Rio de Janeiro","state":"RJ", coords:[-22.90,-43.20], cities:["Rio de Janeiro","Niterói","Duque de Caxias","Nova Iguaçu","São Gonçalo"] },
-  "22": { main:"Campos dos Goytacazes","state":"RJ", coords:[-21.76,-41.33], cities:["Campos dos Goytacazes","Macaé","Cabo Frio","Mendes","São Fidélis"] },
-  "24": { main:"Volta Redonda","state":"RJ", coords:[-22.52,-44.10], cities:["Volta Redonda","Resende","Barra Mansa","Pinheiral","Quatis"] },
-  "27": { main:"Vitória","state":"ES", coords:[-20.32,-40.34], cities:["Vitória","Vila Velha","Serra","Cariacica","Guarapari"] },
-  "28": { main:"Cachoeiro de Itapemirim","state":"ES", coords:[-20.85,-41.12], cities:["Cachoeiro de Itapemirim","Guarapari","Marataízes","Venda Nova do Imigrante"] },
-  "31": { main:"Belo Horizonte","state":"MG", coords:[-19.92,-43.94], cities:["Belo Horizonte","Contagem","Betim","Uberlândia","Juiz de Fora","Montes Claros"] },
-  "32": { main:"Juiz de Fora","state":"MG", coords:[-21.76,-43.34], cities:["Juiz de Fora","Petrópolis (RJ) - área metropolitana"] },
-  "33": { main:"Governador Valadares","state":"MG", coords:[-18.85,-41.95], cities:["Governador Valadares","Manhuaçu"] },
-  "34": { main:"Uberlândia","state":"MG", coords:[-18.91,-48.28], cities:["Uberlândia","Araguari"] },
-  "35": { main:"Poços de Caldas","state":"MG", coords:[-21.78,-46.56], cities:["Poços de Caldas","Pouso Alegre"] },
-  "37": { main:"Uberaba","state":"MG", coords:[-19.75,-47.95], cities:["Uberaba","Franca (SP) - área"] },
-  "38": { main:"Montes Claros","state":"MG", coords:[-16.73,-43.86], cities:["Montes Claros","Januária"] },
-  "41": { main:"Curitiba","state":"PR", coords:[-25.43,-49.27], cities:["Curitiba","Londrina","Maringá","Ponta Grossa"] },
-  "42": { main:"Ponta Grossa","state":"PR", coords:[-25.10,-50.16], cities:["Ponta Grossa","Castro"] },
-  "43": { main:"Londrina","state":"PR", coords:[-23.30,-51.16], cities:["Londrina","Rolândia"] },
-  "44": { main:"Maringá","state":"PR", coords:[-23.42,-51.93], cities:["Maringá","Cianorte"] },
-  "45": { main:"Foz do Iguaçu","state":"PR", coords:[-25.55,-54.58], cities:["Foz do Iguaçu","Cascavel"] },
-  "46": { main:"Pato Branco","state":"PR", coords:[-26.22,-52.67], cities:["Pato Branco","Francisco Beltrão"] },
-  "47": { main:"Joinville","state":"SC", coords:[-26.30,-48.84], cities:["Joinville","Blumenau","Jaraguá do Sul"] },
-  "48": { main:"Florianópolis","state":"SC", coords:[-27.60,-48.55], cities:["Florianópolis","São José","Palhoça"] },
-  "49": { main:"Chapecó","state":"SC", coords:[-27.10,-52.61], cities:["Chapecó","Concórdia"] },
-  "51": { main:"Porto Alegre","state":"RS", coords:[-30.03,-51.23], cities:["Porto Alegre","Canoas","Novo Hamburgo"] },
-  "53": { main:"Pelotas","state":"RS", coords:[-31.76,-52.34], cities:["Pelotas","Rio Grande"] },
-  "54": { main:"Caxias do Sul","state":"RS", coords:[-29.16,-51.18], cities:["Caxias do Sul","Bento Gonçalves"] },
-  "55": { main:"Santa Maria","state":"RS", coords:[-29.69,-53.81], cities:["Santa Maria","Santa Cruz do Sul"] },
-  "61": { main:"Brasília","state":"DF", coords:[-15.79,-47.88], cities:["Brasília","Gama","Taguatinga"] },
-  "62": { main:"Goiânia","state":"GO", coords:[-16.68,-49.25], cities:["Goiânia","Anápolis"] },
-  "63": { main:"Palmas","state":"TO", coords:[-10.18,-48.33], cities:["Palmas","Araguaína"] },
-  "64": { main:"Rio Verde","state":"GO", coords:[-17.79,-50.92], cities:["Rio Verde","Catalão"] },
-  "65": { main:"Cuiabá","state":"MT", coords:[-15.59,-56.10], cities:["Cuiabá","Rondonópolis"] },
-  "66": { main:"Rondonópolis","state":"MT", coords:[-16.47,-54.64], cities:["Rondonópolis","Sinop"] },
-  "67": { main:"Campo Grande","state":"MS", coords:[-20.47,-54.62], cities:["Campo Grande","Dourados"] },
-  "68": { main:"Rio Branco","state":"AC", coords:[-9.97,-67.81], cities:["Rio Branco","Cruzeiro do Sul"] },
-  "69": { main:"Porto Velho","state":"RO", coords:[-8.76,-63.90], cities:["Porto Velho","Ji-Paraná"] },
-  "71": { main:"Salvador","state":"BA", coords:[-12.97,-38.50], cities:["Salvador","Feira de Santana","Vitória da Conquista"] },
-  "72": { main:"Eunápolis","state":"BA", coords:[-16.37,-39.07], cities:["Eunápolis","Porto Seguro"] },
-  "73": { main:"Ilhéus","state":"BA", coords:[-14.79,-39.05], cities:["Ilhéus","Itabuna"] },
-  "74": { main:"Juazeiro","state":"BA", coords:[-9.41,-40.51], cities:["Juazeiro","Jacobina"] },
-  "75": { main:"Feira de Santana","state":"BA", coords:[-12.25,-38.96], cities:["Feira de Santana","Serrinha"] },
-  "77": { main:"Vitória da Conquista","state":"BA", coords:[-14.86,-40.83], cities:["Vitória da Conquista","Guanambi"] },
-  "79": { main:"Aracaju","state":"SE", coords:[-10.91,-37.07], cities:["Aracaju","Nossa Senhora do Socorro"] },
-  "81": { main:"Recife","state":"PE", coords:[-8.05,-34.90], cities:["Recife","Olinda","Jaboatão dos Guararapes","Paulista"] },
-  "82": { main:"Maceió","state":"AL", coords:[-9.66,-35.73], cities:["Maceió","Arapiraca"] },
-  "83": { main:"João Pessoa","state":"PB", coords:[-7.12,-34.86], cities:["João Pessoa","Campina Grande"] },
-  "84": { main:"Natal","state":"RN", coords:[-5.79,-35.21], cities:["Natal","Mossoró"] },
-  "85": { main:"Fortaleza","state":"CE", coords:[-3.72,-38.54], cities:["Fortaleza","Juazeiro do Norte","Sobral"] },
-  "86": { main:"Teresina","state":"PI", coords:[-5.09,-42.80], cities:["Teresina","Parnaíba"] },
-  "87": { main:"Petrolina","state":"PE", coords:[-9.39,-40.50], cities:["Petrolina","Salgueiro"] },
-  "88": { main:"Juazeiro do Norte","state":"CE", coords:[-7.21,-39.32], cities:["Juazeiro do Norte","Crato"] },
-  "89": { main:"Parnaíba","state":"PI", coords:[-2.90,-41.77], cities:["Parnaíba","Picos"] },
-  "91": { main:"Belém","state":"PA", coords:[-1.46,-48.50], cities:["Belém","Ananindeua","Santarém"] },
-  "92": { main:"Manaus","state":"AM", coords:[-3.10,-60.02], cities:["Manaus","Coari"] },
-  "93": { main:"Santarém","state":"PA", coords:[-2.43,-54.70], cities:["Santarém","Itaituba"] },
-  "94": { main:"Marabá","state":"PA", coords:[-5.38,-49.13], cities:["Marabá","Parauapebas"] },
-  "95": { main:"Boa Vista","state":"RR", coords:[2.82,-60.67], cities:["Boa Vista","Caracaraí"] },
-  "96": { main:"Macapá","state":"AP", coords:[0.03,-51.06], cities:["Macapá","Mazagão"] },
-  "97": { main:"Coari","state":"AM", coords:[-4.08,-63.13], cities:["Coari","Humaitá"] },
-  "98": { main:"São Luís","state":"MA", coords:[-2.53,-44.30], cities:["São Luís","Imperatriz"] },
-  "99": { main:"Imperatriz","state":"MA", coords:[-5.53,-47.48], cities:["Imperatriz","Caxias"] }
-};
+  <!-- MAPA -->
+  <div id="map"></div>
 
-/* ---------- UTIL & UI ---------- */
-const phoneInput = document.getElementById('phoneInput');
-const btnMap = document.getElementById('btnMap');
-const btnClear = document.getElementById('btnClear');
-const statusTitle = document.getElementById('statusTitle');
-const statusSub = document.getElementById('statusSub');
-const cityListEl = document.getElementById('cityList');
-const historyList = document.getElementById('historyList');
-
-function extractDDD(input){
-  if(!input) return null;
-  const digits = input.replace(/\D/g,'');
-  if(digits.startsWith('55') && digits.length>=4) return digits.substr(2,2);
-  if(digits.length >= 10) return digits.substr(0,2);
-  if(digits.length === 2) return digits;
-  return null;
-}
-
-/* ---------- MAPA LEAFLET ---------- */
-const map = L.map('map').setView([-14.24, -51.92], 4);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap contributors'
-}).addTo(map);
-let marker;
-
-/* ---------- EVENTOS ---------- */
-btnMap.addEventListener('click', () => {
-  const raw = phoneInput.value.trim();
-  if(!raw){ alert('Insira um número ou DDD.'); return; }
-  const ddd = extractDDD(raw);
-  const info = dddData[ddd];
-  if(!info){ alert('DDD não encontrado'); return; }
-
-  // Atualiza lista de cidades
-  cityListEl.innerHTML = '<ul class="cities">' + info.cities.map(c => `<li>${c}</li>`).join('') + '</ul>';
-
-  // Atualiza marcador no mapa
-  const [lat, lon] = info.coords;
-  if(marker) map.removeLayer(marker);
-  marker = L.marker([lat, lon]).addTo(map)
-    .bindPopup(`<b>${info.main}</b><br>${info.state}`).openPopup();
-  map.setView([lat, lon], 7);
-
-  // Atualiza status
-  statusTitle.textContent = `${info.main} — ${info.state}`;
-  statusSub.textContent = `Cidades associadas ao DDD ${ddd}`;
-
-  // Histórico
-  const li = document.createElement('li');
-  li.textContent = `DDD ${ddd} — ${info.main} (${info.state})`;
-  historyList.prepend(li);
-});
-
-btnClear.addEventListener('click', () => {
-  phoneInput.value = '';
-  statusTitle.textContent = 'Pronto';
-  statusSub.textContent = 'Insira um número e clique em "Mapear DDD".';
-  cityListEl.innerHTML = '<div class="placeholder muted">Aguardando entrada...</div>';
-  if(marker) map.removeLayer(marker);
-});
-</script>
-</body>
-</html>
-function iniciarRastreamentoReal() {
-  if (!navigator.geolocation) {
-    alert("Geolocalização não suportada");
-    return;
-  }
-
-  navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-
-      if (marker) map.removeLayer(marker);
-      marker = L.marker([lat, lon]).addTo(map)
-        .bindPopup("Localização atual do celular")
-        .openPopup();
-
-      map.setView([lat, lon], 15);
-    },
-    (err) => {
-      alert("Erro ao obter localização");
-    },
-    { enableHighAccuracy: true }
-  );
-}
-<<script>
-let marker;
-let watchId = null;
-
-const statusTitle = document.getElementById("statusTitle");
-const statusSub   = document.getElementById("statusSub");
-
-// inicializa mapa
-const map = L.map("map").setView([-15.793889, -47.882778], 4);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "© OpenStreetMap"
-}).addTo(map);
-
-function iniciarRastreamentoReal() {
-  if (!navigator.geolocation) {
-    alert("Geolocalização não suportada neste dispositivo");
-    return;
-  }
-
-  statusTitle.textContent = "Rastreando celular (GPS)";
-  statusSub.textContent = "Localização em tempo real ativa";
-
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const acc = pos.coords.accuracy;
-
-      if (marker) map.removeLayer(marker);
-
-      marker = L.marker([lat, lon]).addTo(map)
-        .bindPopup(`📍 Você está aqui<br>Precisão: ${Math.round(acc)}m`)
-        .openPopup();
-
-      map.setView([lat, lon], 17);
-    },
-    (err) => {
-      alert("Erro ao obter localização: " + err.message);
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
-  );
-}
-</script>
-<body>
-
-  <!-- TODO O HTML -->
+  <!-- CONTROLES -->
   <div id="controls">
     <button onclick="iniciarRastreamentoReal()">▶ Iniciar</button>
     <button onclick="pararRastreamento()">⏹ Parar</button>
 
     <select id="modoGPS">
       <option value="alta">Alta precisão</option>
-      <option value="economia">Economia de bateria</option>
+      <option value="economia">Economia</option>
     </select>
   </div>
 
+  <!-- HUD -->
   <div id="hud">
     <p>Latitude: <span id="lat">--</span></p>
     <p>Longitude: <span id="lon">--</span></p>
     <p>Precisão: <span id="acc">--</span> m</p>
-    <p>Hora: <span id="time">--</span></p>
+    <p>Atualizado: <span id="time">--</span></p>
   </div>
 
-  <!-- SCRIPT SEMPRE AQUI EMBAIXO -->
+  <!-- SCRIPT PRINCIPAL -->
   <script>
-    // TODO O SEU JS AQUI
+    // SERVICE WORKER
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js");
+    }
+
+    // PRIVACIDADE
+    const privacyBox = document.getElementById("privacy");
+    if (localStorage.getItem("privacyAccepted")) {
+      privacyBox.style.display = "none";
+    }
+
+    function aceitarPrivacidade() {
+      localStorage.setItem("privacyAccepted", true);
+      privacyBox.style.display = "none";
+    }
+
+    // MAPA
+    const map = L.map("map").setView([-14.24, -51.92], 4);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    let watchId = null;
+    let marker = null;
+
+    // HUD ELEMENTOS
+    const latEl = document.getElementById("lat");
+    const lonEl = document.getElementById("lon");
+    const accEl = document.getElementById("acc");
+    const timeEl = document.getElementById("time");
+
+    // RESTAURA ÚLTIMA LOCALIZAÇÃO
+    const ultima = JSON.parse(localStorage.getItem("ultimaLocalizacao"));
+    if (ultima) {
+      map.setView([ultima.lat, ultima.lon], 15);
+    }
+
+    function iniciarRastreamentoReal() {
+      if (!navigator.geolocation) {
+        alert("Geolocalização não suportada");
+        return;
+      }
+
+      const modo = document.getElementById("modoGPS").value;
+
+      const options = {
+        enableHighAccuracy: modo === "alta",
+        timeout: 10000,
+        maximumAge: modo === "economia" ? 60000 : 0
+      };
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+
+          if (marker) map.removeLayer(marker);
+
+          marker = L.marker([latitude, longitude])
+            .addTo(map)
+            .bindPopup(`📍 Você está aqui<br>Precisão: ${Math.round(accuracy)}m`)
+            .openPopup();
+
+          map.setView([latitude, longitude], 17);
+
+          latEl.textContent = latitude.toFixed(6);
+          lonEl.textContent = longitude.toFixed(6);
+          accEl.textContent = Math.round(accuracy);
+          timeEl.textContent = new Date().toLocaleTimeString();
+
+          localStorage.setItem(
+            "ultimaLocalizacao",
+            JSON.stringify({ lat: latitude, lon: longitude, acc: accuracy })
+          );
+        },
+        (err) => alert("Erro ao obter localização: " + err.message),
+        options
+      );
+    }
+
+    function pararRastreamento() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        alert("Rastreamento pausado");
+      }
+    }
   </script>
 
 </body>
+</html>
