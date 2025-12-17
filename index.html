@@ -29,11 +29,12 @@
           <p class="muted">Digite o número (com ou sem +55) ou só o DDD (ex: 81).</p>
           <input id="phoneInput" class="input" placeholder="+55 (11) 99999-0000 ou 11" />
           <div class="actions">
-            <button id="btnMap" class="btn primary">Mapear DDD</button>
-            <button id="btnClear" class="btn ghost">Limpar</button>
-          </div>
-          <div class="legal-note muted">Protótipo: usa tabela pública de DDDs. Não identifica pessoas.</div>
-        </div>
+  <button id="btnMap" class="btn primary">Mapear DDD</button>
+  <button onclick="iniciarRastreamentoReal()" class="btn primary">
+    📱 Rastrear meu celular
+  </button>
+  <button id="btnClear" class="btn ghost">Limpar</button>
+</div>
 
         <div class="card history">
           <h3>Histórico</h3>
