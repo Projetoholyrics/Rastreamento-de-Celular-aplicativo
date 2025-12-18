@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -212,6 +212,59 @@
       }
     }
   </script>
+<script>
+/* ===== RASTREAMENTO POR NÚMERO (DDD → MAPA) ===== */
+function consultarNumero() {
+  const input = document.getElementById("phoneInput");
+  const resultado = document.getElementById("dddResult");
+
+  if (!input) return;
+
+  const numero = input.value.replace(/\D/g, "");
+  if (numero.length < 2) {
+    resultado.textContent = "Digite pelo menos o DDD";
+    return;
+  }
+
+  const ddd = numero.substring(0, 2);
+
+  const mapaDDD = {
+    "11": { estado: "São Paulo", lat: -23.55, lon: -46.63 },
+    "21": { estado: "Rio de Janeiro", lat: -22.90, lon: -43.17 },
+    "31": { estado: "Minas Gerais", lat: -19.92, lon: -43.94 },
+    "41": { estado: "Paraná", lat: -25.43, lon: -49.27 },
+    "51": { estado: "Rio Grande do Sul", lat: -30.03, lon: -51.23 },
+    "61": { estado: "Distrito Federal", lat: -15.79, lon: -47.88 },
+    "81": { estado: "Pernambuco", lat: -8.05, lon: -34.90 },
+    "85": { estado: "Ceará", lat: -3.73, lon: -38.52 },
+    "91": { estado: "Pará", lat: -1.45, lon: -48.50 }
+  };
+
+  if (!mapaDDD[ddd]) {
+    resultado.textContent = "DDD não reconhecido";
+    return;
+  }
+
+  const dados = mapaDDD[ddd];
+
+  // Remove marcador do GPS (se existir)
+  if (marker) map.removeLayer(marker);
+
+  // Marca a região do número
+  marker = L.marker([dados.lat, dados.lon])
+    .addTo(map)
+    .bindPopup(
+      `📞 Número localizado (aprox.)<br>
+       <strong>${dados.estado}</strong><br>
+       DDD ${ddd}`
+    )
+    .openPopup();
+
+  map.setView([dados.lat, dados.lon], 9);
+
+  resultado.innerHTML = `📞 ${dados.estado} — DDD ${ddd}<br><small>Localização aproximada</small>`;
+}
+</script>
 
 
 
@@ -341,101 +394,3 @@ if (navigator.geolocation) {
 
 </body>
 </html>
-<script>
-// ================= OPÇÃO A — SIMULAÇÃO POR DDD =================
-function rastrearNumeroSimulado() {
-  const input = document.getElementById("phoneInput");
-  if (!input) {
-    alert("Campo de número não encontrado");
-    return;
-  }
-
-  const numero = input.value.replace(/\D/g, "");
-  const ddd = numero.substring(0, 2);
-
-  const mapaDDD = {
-    "11": { estado: "São Paulo", lat: -23.55, lon: -46.63 },
-    "21": { estado: "Rio de Janeiro", lat: -22.90, lon: -43.17 },
-    "31": { estado: "Minas Gerais", lat: -19.92, lon: -43.94 },
-    "41": { estado: "Paraná", lat: -25.43, lon: -49.27 },
-    "51": { estado: "Rio Grande do Sul", lat: -30.03, lon: -51.23 },
-    "61": { estado: "Distrito Federal", lat: -15.79, lon: -47.88 },
-    "81": { estado: "Pernambuco", lat: -8.05, lon: -34.90 }
-  };
-
-  if (!mapaDDD[ddd]) {
-    alert("DDD não reconhecido para simulação");
-    return;
-  }
-
-  const dados = mapaDDD[ddd];
-
-  if (window.map && window.L) {
-    if (window.marker) map.removeLayer(window.marker);
-
-    window.marker = L.marker([dados.lat, dados.lon])
-      .addTo(map)
-      .bindPopup(`📞 Simulação por número<br><strong>${dados.estado}</strong>`)
-      .openPopup();
-
-    map.setView([dados.lat, dados.lon], 10);
-  }
-}
-
-// ================= OPÇÃO B — GPS REAL =================
-function rastrearLocalizacaoReal() {
-  if (!navigator.geolocation) {
-    alert("Geolocalização não suportada");
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-
-      if (window.map && window.L) {
-        if (window.marker) map.removeLayer(window.marker);
-
-        window.marker = L.marker([lat, lon])
-          .addTo(map)
-          .bindPopup("📍 Localização real (GPS)")
-          .openPopup();
-
-        map.setView([lat, lon], 17);
-      }
-    },
-    err => {
-      alert("Erro no GPS: " + err.message);
-    },
-    { enableHighAccuracy: true }
-  );
-}
-
-// ================= CONTROLE GERAL =================
-function iniciarRastreamento() {
-  const modo = document.querySelector("input[name='modo']:checked").value;
-
-  if (modo === "simulado") {
-    rastrearNumeroSimulado();
-  } else {
-    rastrearLocalizacaoReal();
-  }
-}
-</script>
-<div class="modo-box" style="margin-top:20px;">
-  <h3>🛰️ Modo de Rastreamento</h3>
-
-  <label>
-    <input type="radio" name="modo" value="simulado" checked>
-    Simulação por número (DDD)
-  </label><br>
-
-  <label>
-    <input type="radio" name="modo" value="real">
-    Localização real (GPS)
-  </label>
-
-  <br><br>
-  <button onclick="iniciarRastreamento()">Iniciar rastreamento</button>
-</div>
