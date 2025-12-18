@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -212,59 +212,6 @@
       }
     }
   </script>
-<script>
-/* ===== RASTREAMENTO POR NÚMERO (DDD → MAPA) ===== */
-function consultarNumero() {
-  const input = document.getElementById("phoneInput");
-  const resultado = document.getElementById("dddResult");
-
-  if (!input) return;
-
-  const numero = input.value.replace(/\D/g, "");
-  if (numero.length < 2) {
-    resultado.textContent = "Digite pelo menos o DDD";
-    return;
-  }
-
-  const ddd = numero.substring(0, 2);
-
-  const mapaDDD = {
-    "11": { estado: "São Paulo", lat: -23.55, lon: -46.63 },
-    "21": { estado: "Rio de Janeiro", lat: -22.90, lon: -43.17 },
-    "31": { estado: "Minas Gerais", lat: -19.92, lon: -43.94 },
-    "41": { estado: "Paraná", lat: -25.43, lon: -49.27 },
-    "51": { estado: "Rio Grande do Sul", lat: -30.03, lon: -51.23 },
-    "61": { estado: "Distrito Federal", lat: -15.79, lon: -47.88 },
-    "81": { estado: "Pernambuco", lat: -8.05, lon: -34.90 },
-    "85": { estado: "Ceará", lat: -3.73, lon: -38.52 },
-    "91": { estado: "Pará", lat: -1.45, lon: -48.50 }
-  };
-
-  if (!mapaDDD[ddd]) {
-    resultado.textContent = "DDD não reconhecido";
-    return;
-  }
-
-  const dados = mapaDDD[ddd];
-
-  // Remove marcador do GPS (se existir)
-  if (marker) map.removeLayer(marker);
-
-  // Marca a região do número
-  marker = L.marker([dados.lat, dados.lon])
-    .addTo(map)
-    .bindPopup(
-      `📞 Número localizado (aprox.)<br>
-       <strong>${dados.estado}</strong><br>
-       DDD ${ddd}`
-    )
-    .openPopup();
-
-  map.setView([dados.lat, dados.lon], 9);
-
-  resultado.innerHTML = `📞 ${dados.estado} — DDD ${ddd}<br><small>Localização aproximada</small>`;
-}
-</script>
 
 
 
@@ -390,6 +337,123 @@ if (navigator.geolocation) {
   });
 }
 // ===== FIM: Integrações =====
+</script>
+<script>
+/* ======================================================
+   CORREÇÃO DE CONSULTA POR DDD (ADIÇÃO SEM ALTERAR NADA)
+   ====================================================== */
+
+function consultarNumero() {
+  const input = document.getElementById("phoneInput").value || "";
+  const result = document.getElementById("dddResult");
+
+  // remove tudo que não é número
+  const numeros = input.replace(/\D/g, "");
+
+  if (numeros.length < 10) {
+    result.textContent = "Número inválido";
+    return;
+  }
+
+  // Detecta DDD (Brasil)
+  let ddd = numeros.startsWith("55")
+    ? numeros.substring(2, 4)
+    : numeros.substring(0, 2);
+
+  const mapaDDD = {
+    // São Paulo
+    "11":"São Paulo","12":"São Paulo","13":"São Paulo","14":"São Paulo",
+    "15":"São Paulo","16":"São Paulo","17":"São Paulo","18":"São Paulo","19":"São Paulo",
+
+    // Rio de Janeiro
+    "21":"Rio de Janeiro","22":"Rio de Janeiro","24":"Rio de Janeiro",
+
+    // Minas Gerais
+    "31":"Minas Gerais","32":"Minas Gerais","33":"Minas Gerais",
+    "34":"Minas Gerais","35":"Minas Gerais","37":"Minas Gerais","38":"Minas Gerais",
+
+    // Paraná
+    "41":"Paraná","42":"Paraná","43":"Paraná","44":"Paraná","45":"Paraná","46":"Paraná",
+
+    // Rio Grande do Sul
+    "51":"Rio Grande do Sul","53":"Rio Grande do Sul","54":"Rio Grande do Sul","55":"Rio Grande do Sul",
+
+    // Santa Catarina
+    "47":"Santa Catarina","48":"Santa Catarina","49":"Santa Catarina",
+
+    // Distrito Federal
+    "61":"Distrito Federal",
+
+    // Goiás
+    "62":"Goiás","64":"Goiás",
+
+    // Pernambuco
+    "81":"Pernambuco","87":"Pernambuco",
+
+    // Ceará
+    "85":"Ceará","88":"Ceará",
+
+    // Pará
+    "91":"Pará","93":"Pará","94":"Pará",
+
+    // Amazonas
+    "92":"Amazonas","97":"Amazonas",
+
+    // ✅ PIAUÍ (ADICIONADO)
+    "86":"Piauí","89":"Piauí"
+  };
+
+  const estado = mapaDDD[ddd];
+
+  if (estado) {
+    result.innerHTML = `📍 DDD ${ddd} — ${estado}`;
+    if (typeof mostrarEstadoNoMapa === "function") {
+      mostrarEstadoNoMapa(estado);
+    }
+  } else {
+    result.textContent = "DDD não reconhecido";
+  }
+}
+
+/* ======================================================
+   COORDENADAS APROXIMADAS POR ESTADO (ADIÇÃO)
+   ====================================================== */
+
+const coordenadasEstados = Object.assign({}, window.coordenadasEstados || {}, {
+  "Paraná": [-25.25, -52.02],
+  "São Paulo": [-23.55, -46.63],
+  "Rio de Janeiro": [-22.90, -43.20],
+  "Minas Gerais": [-19.92, -43.94],
+  "Rio Grande do Sul": [-30.03, -51.23],
+  "Santa Catarina": [-27.59, -48.55],
+  "Distrito Federal": [-15.79, -47.88],
+  "Goiás": [-16.68, -49.25],
+  "Pernambuco": [-8.05, -34.90],
+  "Ceará": [-3.73, -38.52],
+  "Pará": [-1.45, -48.50],
+  "Amazonas": [-3.12, -60.02],
+
+  // ✅ PIAUÍ
+  "Piauí": [-5.09, -42.80]
+});
+
+/* ======================================================
+   MOSTRAR ESTADO NO MAPA (SEM MEXER NO GPS REAL)
+   ====================================================== */
+
+function mostrarEstadoNoMapa(estado) {
+  if (!coordenadasEstados[estado]) return;
+
+  const lat = coordenadasEstados[estado][0];
+  const lon = coordenadasEstados[estado][1];
+
+  L.marker([lat, lon])
+    .addTo(map)
+    .bindPopup("📞 Região aproximada: " + estado)
+    .openPopup();
+
+  map.setView([lat, lon], 6);
+}
 </script>
 
 </body>
