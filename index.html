@@ -2,457 +2,164 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rastreamento de Celular – Rastreamento</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#ff8a00">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rastreamento Profissional</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
   <style>
-    body {
-      margin: 0;
-      background: #0b0d0f;
-      color: #00ffe1;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-
-    #map {
-      height: 55vh;
-      width: 100%;
-    }
-
-    #controls {
-      display: flex;
-      gap: 10px;
-      padding: 10px;
-      flex-wrap: wrap;
-    }
-
-    #controls button, #controls select {
-      background: #0b0d0f;
-      color: #00ffe1;
-      border: 1px solid #00ffe1;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 14px;
-    }
-
-    #hud {
-      margin: 10px;
-      padding: 12px;
-      backdrop-filter: blur(10px);
-      background: rgba(0,0,0,0.55);
-      border: 1px solid #00ffe1;
-      border-radius: 14px;
-      font-family: monospace;
-    }
-
-    #privacy {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.9);
-      color: #00ffe1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-    }
-
-    #privacy div {
-      max-width: 400px;
-      padding: 20px;
-      border: 1px solid #00ffe1;
-      border-radius: 12px;
-      text-align: center;
-      background: #0b0d0f;
-    }
-
-    #privacy button {
-      margin-top: 15px;
-      padding: 10px 16px;
-      background: #00ffe1;
-      border: none;
-      color: #000;
-      border-radius: 8px;
-      font-weight: bold;
+    body { margin:0; background:#0b0d0f; color:#00ffe1; font-family:Arial;}
+    #map { height:50vh; }
+    #hud { padding:10px; }
+    input, button, select {
+      width:100%; margin-top:6px; padding:10px;
+      background:#0b0d0f; color:#00ffe1;
+      border:1px solid #00ffe1; border-radius:8px;
     }
   </style>
 </head>
 
 <body>
 
-  <!-- AVISO DE PRIVACIDADE -->
-  <div id="privacy">
-    <div>
-      <h3>Uso de Localização</h3>
-      <p>Este aplicativo utiliza sua localização apenas para rastreamento em tempo real. Nenhuma informação é compartilhada.</p>
-      <button onclick="aceitarPrivacidade()">Aceitar</button>
-    </div>
-  </div>
+<div id="map"></div>
 
-  <!-- MAPA -->
-  <div id="map"></div>
+<div id="hud">
+  <p>🆔 Seu ID: <span id="meuId"></span></p>
 
-  <!-- CONTROLES -->
-  <div id="controls">
-    <button onclick="iniciarRastreamentoReal()">▶ Iniciar</button>
-    <button onclick="pararRastreamento()">⏹ Parar</button>
+  <button onclick="iniciar()">▶ Iniciar rastreamento</button>
+  <button onclick="parar()">⏹ Parar rastreamento</button>
 
-    <select id="modoGPS">
-      <option value="alta">Alta precisão</option>
-      <option value="economia">Economia</option>
-    </select>
-  </div>
+  <hr>
 
-  <!-- HUD -->
-  <div id="hud">
-    <p>Latitude: <span id="lat">--</span></p>
-    <p>Longitude: <span id="lon">--</span></p>
-    <p>Precisão: <span id="acc">--</span> m</p>
-    <p>Atualizado: <span id="time">--</span></p>
-    <hr>
-    <p>📞 Consulta por DDD</p>
-    <input id="phoneInput" placeholder="DDD + número" style="width:100%;margin-top:6px">
-    <button onclick="consultarNumero()" style="margin-top:6px">Consultar</button>
-    <p id="dddResult" style="margin-top:6px"></p>
-  </div>
+  <p>👥 Rastrear outro usuário</p>
+  <input id="trackInput" placeholder="Digite o ID">
+  <button onclick="rastrear()">Rastrear</button>
 
-  <!-- SCRIPT PRINCIPAL -->
-  <script>
-    // SERVICE WORKER
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./sw.js");
-    }
+  <hr>
 
-    // PRIVACIDADE
-    const privacyBox = document.getElementById("privacy");
-    if (localStorage.getItem("privacyAccepted")) {
-      privacyBox.style.display = "none";
-    }
-
-    function aceitarPrivacidade() {
-      localStorage.setItem("privacyAccepted", true);
-      privacyBox.style.display = "none";
-    }
-
-    // MAPA
-    const map = L.map("map").setView([-14.24, -51.92], 4);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap"
-    }).addTo(map);
-
-    let watchId = null;
-    let marker = null;
-
-    // HUD ELEMENTOS
-    const latEl = document.getElementById("lat");
-    const lonEl = document.getElementById("lon");
-    const accEl = document.getElementById("acc");
-    const timeEl = document.getElementById("time");
-
-    // RESTAURA ÚLTIMA LOCALIZAÇÃO
-    const ultima = JSON.parse(localStorage.getItem("ultimaLocalizacao"));
-    if (ultima) {
-      map.setView([ultima.lat, ultima.lon], 15);
-    }
-
-    function iniciarRastreamentoReal() {
-      if (!navigator.geolocation) {
-        alert("Geolocalização não suportada");
-        return;
-      }
-
-      const modo = document.getElementById("modoGPS").value;
-
-      const options = {
-        enableHighAccuracy: modo === "alta",
-        timeout: 10000,
-        maximumAge: modo === "economia" ? 60000 : 0
-      };
-
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
-
-          if (marker) map.removeLayer(marker);
-
-          marker = L.marker([latitude, longitude])
-            .addTo(map)
-            .bindPopup(`📍 Você está aqui<br>Precisão: ${Math.round(accuracy)}m`)
-            .openPopup();
-
-          map.setView([latitude, longitude], 17);
-
-          latEl.textContent = latitude.toFixed(6);
-          lonEl.textContent = longitude.toFixed(6);
-          accEl.textContent = Math.round(accuracy);
-          timeEl.textContent = new Date().toLocaleTimeString();
-
-          localStorage.setItem(
-            "ultimaLocalizacao",
-            JSON.stringify({ lat: latitude, lon: longitude, acc: accuracy })
-          );
-        },
-        (err) => alert("Erro ao obter localização: " + err.message),
-        options
-      );
-    }
-
-    function pararRastreamento() {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-        alert("Rastreamento pausado");
-      }
-    }
-  </script>
-
-
-
-<!-- ===== INÍCIO: Seleção de País / Estados (Brasil e Exterior) ===== -->
-<div class="localizacao-box" style="margin-top:20px;">
-  <h3>📍 Localização</h3>
-
-  <label for="pais">País:</label>
-  <select id="pais" onchange="atualizarEstados()">
-    <option value="">Selecione o país</option>
-    <option value="BR">Brasil</option>
-    <option value="US">Estados Unidos</option>
-    <option value="PT">Portugal</option>
-    <option value="AR">Argentina</option>
-    <option value="FR">França</option>
-    <option value="DE">Alemanha</option>
-    <option value="JP">Japão</option>
-    <option value="OUTRO">Outro</option>
-  </select>
-
-  <label for="estado">Estado / Região:</label>
-  <select id="estado">
-    <option value="">Selecione</option>
-  </select>
+  <p>📍 Latitude: <span id="lat">--</span></p>
+  <p>📍 Longitude: <span id="lon">--</span></p>
+  <p>🎯 Precisão: <span id="acc">--</span></p>
 </div>
-<!-- ===== FIM: Seleção de País / Estados ===== -->
 
 <script>
-// ===== INÍCIO: Dados de Estados e Regiões =====
-const estadosBrasil = [
-  "Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará",
-  "Distrito Federal", "Espírito Santo", "Goiás", "Maranhão",
-  "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais",
-  "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí",
-  "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul",
-  "Rondônia", "Roraima", "Santa Catarina", "São Paulo",
-  "Sergipe", "Tocantins"
-];
+/* ================= FIREBASE ================= */
 
-const regioesExterior = {
-  US: ["Califórnia", "Texas", "Flórida", "Nova York"],
-  PT: ["Lisboa", "Porto", "Braga", "Coimbra"],
-  AR: ["Buenos Aires", "Córdoba", "Rosário"],
-  FR: ["Île-de-France", "Occitânia", "Provença"],
-  DE: ["Berlim", "Baviera", "Hamburgo"],
-  JP: ["Tóquio", "Osaka", "Quioto"]
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_APP.firebaseapp.com",
+  databaseURL: "https://SEU_APP-default-rtdb.firebaseio.com",
+  projectId: "SEU_APP",
 };
 
-function atualizarEstados() {
-  const pais = document.getElementById("pais").value;
-  const estadoSelect = document.getElementById("estado");
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  estadoSelect.innerHTML = "<option value=''>Selecione</option>";
+/* ================= ID DO USUÁRIO ================= */
 
-  if (pais === "BR") {
-    estadosBrasil.forEach(estado => {
-      const opt = document.createElement("option");
-      opt.value = estado;
-      opt.textContent = estado;
-      estadoSelect.appendChild(opt);
-    });
-  } else if (regioesExterior[pais]) {
-    regioesExterior[pais].forEach(regiao => {
-      const opt = document.createElement("option");
-      opt.value = regiao;
-      opt.textContent = regiao;
-      estadoSelect.appendChild(opt);
-    });
-  }
-}
-// ===== FIM: Dados de Estados e Regiões =====
+let userId = localStorage.getItem("userId");
 
-// ===== INÍCIO: Integração País + Estado + DDD + GPS =====
-const dddPorEstado = {
-  "São Paulo": "11–19",
-  "Rio de Janeiro": "21–24",
-  "Minas Gerais": "31–38",
-  "Bahia": "71–77",
-  "Paraná": "41–46",
-  "Rio Grande do Sul": "51–55",
-  "Santa Catarina": "47–49",
-  "Distrito Federal": "61",
-  "Goiás": "62–64",
-  "Pernambuco": "81–89",
-  "Ceará": "85–88",
-  "Pará": "91–94",
-  "Amazonas": "92–97"
-};
-
-function mostrarDDD() {
-  const estado = document.getElementById("estado").value;
-  let info = document.getElementById("infoDDD");
-
-  if (!info) {
-    info = document.createElement("div");
-    info.id = "infoDDD";
-    document.querySelector(".localizacao-box").appendChild(info);
-  }
-
-  if (dddPorEstado[estado]) {
-    info.innerHTML = `📞 DDD do estado: <strong>${dddPorEstado[estado]}</strong>`;
-  } else if (estado) {
-    info.innerHTML = "📞 DDD não disponível para esta região";
-  }
+if (!userId) {
+  userId = "user_" + Math.random().toString(36).substring(2,8);
+  localStorage.setItem("userId", userId);
 }
 
-const estadoSelect = document.getElementById("estado");
-if (estadoSelect) {
-  estadoSelect.addEventListener("change", mostrarDDD);
-}
+document.getElementById("meuId").textContent = userId;
 
-// ===== INTEGRAÇÃO COM GPS =====
-function detectarPaisPorGPS(lat, lon) {
-  if (lat < -33 && lat > -5 && lon < -34 && lon > -74) {
-    document.getElementById("pais").value = "BR";
-    atualizarEstados();
-  }
-}
+/* ================= MAPA ================= */
 
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(pos => {
-    detectarPaisPorGPS(pos.coords.latitude, pos.coords.longitude);
-  });
-}
-// ===== FIM: Integrações =====
-</script>
-<script>
-/* ======================================================
-   CORREÇÃO DE CONSULTA POR DDD (ADIÇÃO SEM ALTERAR NADA)
-   ====================================================== */
+const map = L.map("map").setView([-5.09, -42.80], 13);
 
-function consultarNumero() {
-  const input = document.getElementById("phoneInput").value || "";
-  const result = document.getElementById("dddResult");
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap"
+}).addTo(map);
 
-  // remove tudo que não é número
-  const numeros = input.replace(/\D/g, "");
+let marker = null;
+let watchId = null;
+let marcadorOutro = null;
 
-  if (numeros.length < 10) {
-    result.textContent = "Número inválido";
+/* ================= INICIAR ================= */
+
+function iniciar() {
+  if (!navigator.geolocation) {
+    alert("GPS não suportado");
     return;
   }
 
-  // Detecta DDD (Brasil)
-  let ddd = numeros.startsWith("55")
-    ? numeros.substring(2, 4)
-    : numeros.substring(0, 2);
+  watchId = navigator.geolocation.watchPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    const acc = pos.coords.accuracy;
 
-  const mapaDDD = {
-    // São Paulo
-    "11":"São Paulo","12":"São Paulo","13":"São Paulo","14":"São Paulo",
-    "15":"São Paulo","16":"São Paulo","17":"São Paulo","18":"São Paulo","19":"São Paulo",
+    document.getElementById("lat").textContent = lat.toFixed(6);
+    document.getElementById("lon").textContent = lon.toFixed(6);
+    document.getElementById("acc").textContent = Math.round(acc) + " m";
 
-    // Rio de Janeiro
-    "21":"Rio de Janeiro","22":"Rio de Janeiro","24":"Rio de Janeiro",
+    if (marker) map.removeLayer(marker);
 
-    // Minas Gerais
-    "31":"Minas Gerais","32":"Minas Gerais","33":"Minas Gerais",
-    "34":"Minas Gerais","35":"Minas Gerais","37":"Minas Gerais","38":"Minas Gerais",
+    marker = L.marker([lat, lon])
+      .addTo(map)
+      .bindPopup("📍 Você")
+      .openPopup();
 
-    // Paraná
-    "41":"Paraná","42":"Paraná","43":"Paraná","44":"Paraná","45":"Paraná","46":"Paraná",
+    map.setView([lat, lon], 17);
 
-    // Rio Grande do Sul
-    "51":"Rio Grande do Sul","53":"Rio Grande do Sul","54":"Rio Grande do Sul","55":"Rio Grande do Sul",
+    // 🔥 ENVIA PARA O FIREBASE
+    db.ref("localizacoes/" + userId).set({
+      lat, lon, acc, time: Date.now()
+    });
 
-    // Santa Catarina
-    "47":"Santa Catarina","48":"Santa Catarina","49":"Santa Catarina",
-
-    // Distrito Federal
-    "61":"Distrito Federal",
-
-    // Goiás
-    "62":"Goiás","64":"Goiás",
-
-    // Pernambuco
-    "81":"Pernambuco","87":"Pernambuco",
-
-    // Ceará
-    "85":"Ceará","88":"Ceará",
-
-    // Pará
-    "91":"Pará","93":"Pará","94":"Pará",
-
-    // Amazonas
-    "92":"Amazonas","97":"Amazonas",
-
-    // ✅ PIAUÍ (ADICIONADO)
-    "86":"Piauí","89":"Piauí"
-  };
-
-  const estado = mapaDDD[ddd];
-
-  if (estado) {
-    result.innerHTML = `📍 DDD ${ddd} — ${estado}`;
-    if (typeof mostrarEstadoNoMapa === "function") {
-      mostrarEstadoNoMapa(estado);
-    }
-  } else {
-    result.textContent = "DDD não reconhecido";
-  }
+  }, err => {
+    alert("Erro: " + err.message);
+  }, {
+    enableHighAccuracy: true
+  });
 }
 
-/* ======================================================
-   COORDENADAS APROXIMADAS POR ESTADO (ADIÇÃO)
-   ====================================================== */
+/* ================= PARAR ================= */
 
-const coordenadasEstados = Object.assign({}, window.coordenadasEstados || {}, {
-  "Paraná": [-25.25, -52.02],
-  "São Paulo": [-23.55, -46.63],
-  "Rio de Janeiro": [-22.90, -43.20],
-  "Minas Gerais": [-19.92, -43.94],
-  "Rio Grande do Sul": [-30.03, -51.23],
-  "Santa Catarina": [-27.59, -48.55],
-  "Distrito Federal": [-15.79, -47.88],
-  "Goiás": [-16.68, -49.25],
-  "Pernambuco": [-8.05, -34.90],
-  "Ceará": [-3.73, -38.52],
-  "Pará": [-1.45, -48.50],
-  "Amazonas": [-3.12, -60.02],
+function parar() {
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
 
-  // ✅ PIAUÍ
-  "Piauí": [-5.09, -42.80]
-});
+  db.ref("localizacoes/" + userId).remove();
+}
 
-/* ======================================================
-   MOSTRAR ESTADO NO MAPA (SEM MEXER NO GPS REAL)
-   ====================================================== */
+/* ================= RASTREAR OUTRO ================= */
 
-function mostrarEstadoNoMapa(estado) {
-  if (!coordenadasEstados[estado]) return;
+function rastrear() {
+  const id = document.getElementById("trackInput").value;
 
-  const lat = coordenadasEstados[estado][0];
-  const lon = coordenadasEstados[estado][1];
+  if (!id) {
+    alert("Digite um ID");
+    return;
+  }
 
-  L.marker([lat, lon])
-    .addTo(map)
-    .bindPopup("📞 Região aproximada: " + estado)
-    .openPopup();
+  db.ref("localizacoes/" + id).on("value", snap => {
+    const data = snap.val();
 
-  map.setView([lat, lon], 6);
+    if (!data) {
+      alert("Usuário offline ou não encontrado");
+      return;
+    }
+
+    if (marcadorOutro) map.removeLayer(marcadorOutro);
+
+    marcadorOutro = L.marker([data.lat, data.lon])
+      .addTo(map)
+      .bindPopup("📍 Usuário rastreado")
+      .openPopup();
+
+    map.setView([data.lat, data.lon], 17);
+  });
 }
 </script>
 
